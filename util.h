@@ -9,8 +9,8 @@
 #define max(a, b) (a > b ? a : b)
 
 #define syslog(fmt, ...) ( \
-	fprintf(stderr, "%s: ", argv0), \
-	fprintf(stderr, fmt, __VA_ARGS__), \
+	dprintf(2, "%s: ", argv0), \
+	dprintf(2, fmt, __VA_ARGS__), \
 	putc('\n', stderr) \
 )
 #define sysfatal(fmt, ...) (syslog(fmt, __VA_ARGS__), exit(1))

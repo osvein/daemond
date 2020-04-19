@@ -41,7 +41,7 @@ Service *service(const char *name) {
 			self->killfd = -1;
 		}
 	}
-	if (self->killfd < 0) fprintf(stderr, "failed to open %s\n", path);
+	if (self->killfd < 0) dprintf(2, "failed to open %s\n", path);
 	return self;
 }
 
@@ -89,7 +89,6 @@ int service_readkill(Service *self) {
 	ssize_t n = strnlen(pos, lenof(self->killbuf));
 	bool overflow = n >= lenof(self->killbuf);
 	while (!(sep = memchr(pos, '\n', n))) {
-		fprintf(stderr, "killbuf = %.7s\n", self->killbuf);
 		pos += n;
 		if (pos >= endof(self->killbuf)) {
 			pos = self->killbuf;

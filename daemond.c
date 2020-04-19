@@ -24,10 +24,7 @@ Service *services;
 time_t timeout;
 
 void usage(void) {
-	fprintf(stderr,
-		"usage: %s [-t timeout] [next_program [arg...]]\n",
-		argv0
-	);
+	dprintf(2, "usage: %s [-t timeout] [next_program [arg...]]\n", argv0);
 	exit(1);
 }
 
@@ -50,7 +47,7 @@ pid_t spawn(const char *name) {
 		execv(path, (char *const []){(char *)name, NULL});
 		exit(127);
 	}
-	printf("spawned %s[%li]\n", name, (long)pid);
+	dprintf(1, "spawned %s[%li]\n", name, (long)pid);
 	return pid;
 }
 
@@ -80,7 +77,7 @@ void scan(void) {
 		Service *srv = service(srvfile->d_name);
 		service_setpid(srv, pid);
 		service_insert(pos, srv);
-		if (*pos) printf("added service %s\n", srv->name);
+		if (*pos) dprintf(1, "added service %s\n", srv->name);
 	}
 	closedir(dir);
 }
@@ -91,12 +88,12 @@ void reap(void) {
 	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
 		Service **srv = service_from_pid(&services, pid);
 		const char *name = *srv ? (*srv)->name : "";
-		printf("%s[%li] ", name, (long)pid);
+		dprintf(1, "%s[%li] ", name, (long)pid);
 		if (WIFEXITED(status)) {
-			printf("exited with code %i\n", (int)WEXITSTATUS(status));
+			dprintf(1, "exited with code %i\n", (int)WEXITSTATUS(status));
 		} else {
 			int sig = WTERMSIG(status);
-			printf("was terminated by signal %s[%i]\n", strsignal(sig), sig);
+			dprintf(1, "was terminated by signal %s[%i]\n", strsignal(sig), sig);
 		}
 		if (*srv) {
 			pid = spawn(name);
@@ -104,7 +101,7 @@ void reap(void) {
 				service_setpid(*srv, pid);
 			} else {
 				service_destroy(service_delete(srv));
-				printf("removed service %s\n", name);
+				dprintf(1, "removed service %s\n", name);
 			}
 		}
 	}
@@ -115,11 +112,11 @@ void readkill(Service *srv) {
 	while ((sig = service_readkill(srv))) {
 		if (sig > 0) {
 			kill(srv->pid, sig);
-			printf("sent signal to %s[%li] as requested on fifo: %s[%i]\n",
+			dprintf(1, "sent signal to %s[%li] as requested on fifo: %s[%i]\n",
 				srv->name, (long)srv->pid, strsignal(sig), sig
 			);
 		} else {
-			fprintf(stderr, "invalid signal requested for %s[%li] on fifo\n",
+			dprintf(2, "invalid signal requested for %s[%li] on fifo\n",
 				srv->name, (long)srv->pid
 			);
 		}
@@ -138,7 +135,6 @@ void loop(void) {
 		if (srv->killfd >= nfds) nfds = srv->killfd + 1;
 		FD_SET(srv->killfd, &readfds);
 	}
-	fprintf(stderr, "nfds = %i\n", nfds);
 	nfds = pselect(nfds, &readfds, NULL, NULL,
 		timeout > 0 ? &(struct timespec){.tv_sec = timeout} : NULL,
 		&sync_sigmask
