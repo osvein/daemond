@@ -38,13 +38,16 @@ pid_t spawn(const char *name) {
 	pid_t pid = fork();
 	if (pid == 0) {
 		sigset_t sigmask;
+		errno = 0;
 		sigemptyset(&sigmask);
 		sigprocmask(SIG_SETMASK, &sigmask, NULL);
+		chdir(name);
+		setsid();
 		close(0);
 		close(1);
 		close(2);
+		if (errno) exit(125);
 		execv(path, (char *const []){(char *)name, NULL});
-		//fprintf(stderr, "exec failed: %s[%i]\n", strerror(errno), errno);
 		exit(127);
 	}
 	printf("spawned %s[%li]\n", name, (long)pid);
