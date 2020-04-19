@@ -16,6 +16,7 @@
 #include "util.h"
 
 const char execdir[] = "exec/";
+const char substfile[] = "subst";
 
 volatile sig_atomic_t termflag;
 sigset_t sync_sigmask;
@@ -29,9 +30,12 @@ void usage(void) {
 }
 
 pid_t spawn(const char *name) {
-	char path[lenof(execdir) + strlen(name)];
-	stpcpy(stpcpy(path, execdir), name);
-	if (access(path, X_OK) < 0) return 0;
+	char path[strlen(name) + max(lenof(execdir), lenof(substfile) + 1)];
+	sprintf(path, "%s/%s", name, substfile);
+	if (access(path, X_OK) < 0) {
+		sprintf(path, "%s%s", execdir, name);
+		if (access(path, X_OK) < 0) return 0;
+	}
 	pid_t pid = fork();
 	if (pid == 0) {
 		sigset_t sigmask;
