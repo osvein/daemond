@@ -24,12 +24,12 @@ const char *argv0;
 Service *services;
 time_t timeout;
 
-void usage(void) {
+static void usage(void) {
 	dprintf(2, "usage: %s [-t timeout] [next_program [arg...]]\n", argv0);
 	exit(1);
 }
 
-pid_t spawn(const char *name) {
+static pid_t spawn(const char *name) {
 	char path[strlen(name) + max(lenof(execdir), lenof(substfile) + 1)];
 	sprintf(path, "%s/%s", name, substfile);
 	if (access(path, X_OK) < 0) {
@@ -55,7 +55,7 @@ pid_t spawn(const char *name) {
 	return pid;
 }
 
-void scan(void) {
+static void scan(void) {
 #if !SKIP_MTIME
 	{
 		static struct timespec scantime;
@@ -86,7 +86,7 @@ void scan(void) {
 	closedir(dir);
 }
 
-void reap(void) {
+static void reap(void) {
 	int status;
 	pid_t pid;
 	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
@@ -111,7 +111,7 @@ void reap(void) {
 	}
 }
 
-void readkill(Service *srv) {
+static void readkill(Service *srv) {
 	int sig;
 	while ((sig = service_readkill(srv))) {
 		if (sig > 0) {
@@ -127,7 +127,7 @@ void readkill(Service *srv) {
 	}
 }
 
-void loop(void) {
+static void loop(void) {
 	scan();
 	reap();
 
@@ -152,11 +152,11 @@ void loop(void) {
 	}
 }
 
-void terminate(int sig) {
+static void terminate(int sig) {
 	termflag = 1;
 }
 
-void signop(int sig) {}
+static void signop(int sig) {}
 
 int main(int argc, char **argv) {
 	argv0 = *argv;
