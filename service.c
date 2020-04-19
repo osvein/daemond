@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -14,34 +15,49 @@
 #define fork vfork
 #endif
 
-const char pidfile[] = "/pid";
-const char killfile[] = "/kill";
+const char pidfile[] = "pid";
+const char killpipe[] = "kill";
 
 Service *service(const char *name) {
 	size_t namelen = strlen(name);
 	Service *self = malloc(sizeof(*self) + namelen + 1);
 	self->next = NULL;
 	self->pid = 0;
-	mkdir(name, 0777);
-	char path[namelen + sizeof(killfile)];
-	stpcpy(stpcpy(path, name), killfile);
-	mkfifo(path, 0777);
-	self->killfd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-	fcntl(self->killfd, F_SETFL, fcntl(self->killfd, F_GETFL) | O_NONBLOCK);
 	self->killbuf[0] = '\0';
 	stpcpy(self->name, name);
+	mkdir(name, 0777);
+
+	char path[namelen + 1 + lenof(killpipe)];
+	sprintf(path, "%s/%s", name, killpipe);
+	mkfifo(path, 0777);
+	self->killfd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+	if (self->killfd >= 0) {
+		int flags = fcntl(self->killfd, F_GETFL);
+		if (flags < 0 ||
+			fcntl(self->killfd, F_SETFL, flags | O_NONBLOCK) < 0 ||
+			open(path, O_WRONLY | O_CLOEXEC) < 0
+		) {
+			close(self->killfd);
+			self->killfd = -1;
+		}
+	}
+	if (self->killfd < 0) fprintf(stderr, "failed to open %s\n", path);
 	return self;
 }
 
 void service_destroy(Service *self) {
 	while (self) {
 		Service *next = self->next;
-		char path[strlen(self->name) + max(sizeof(pidfile), sizeof(killfile))];
+		char path[strlen(self->name) + 1
+			+ max(sizeof(pidfile), sizeof(killpipe))
+		];
 		char *base = stpcpy(path, self->name);
+		*base++ = '/';
 		stpcpy(base, pidfile);
 		unlink(path);
-		stpcpy(base, killfile);
+		stpcpy(base, killpipe);
 		unlink(path);
+		*base = '\0';
 		rmdir(path);
 		if (self->killfd >= 0) close(self->killfd);
 		free(self);
@@ -52,14 +68,11 @@ void service_destroy(Service *self) {
 void service_setpid(Service *self, pid_t pid) {
 	int fd;
 	{
-		char path[strlen(self->name) + sizeof(pidfile)];
-		stpcpy(stpcpy(path, self->name), pidfile);
+		char path[strlen(self->name) + 1 + lenof(pidfile)];
+		sprintf(path, "%s/%s", self->name, pidfile);
 		fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 	}
-	char buf[3 * sizeof(pid) + 1];
-	char *str = int_to_str(pid, buf, sizeof(buf), 10);
-	endof(buf)[-1] = '\n';
-	write(fd, str, endof(buf) - str);
+	dprintf(fd, "%li\n", (long)pid);
 	close(fd);
 	self->pid = pid;
 }
@@ -73,6 +86,7 @@ int service_readkill(Service *self) {
 	ssize_t n = strnlen(pos, lenof(self->killbuf));
 	bool overflow = n >= lenof(self->killbuf);
 	while (!(sep = memchr(pos, '\n', n))) {
+		fprintf(stderr, "killbuf = %.7s\n", self->killbuf);
 		pos += n;
 		if (pos >= endof(self->killbuf)) {
 			pos = self->killbuf;
@@ -81,7 +95,7 @@ int service_readkill(Service *self) {
 			*pos = '\0';
 		}
 		n = read(self->killfd, pos, endof(self->killbuf) - pos);
-		if (n < 0) return 0;
+		if (n <= 0) return 0;
 		char *c = pos + n;
 		while (c-- > pos) if (!*c) *c = '?'; // neutralize NUL chars
 	}

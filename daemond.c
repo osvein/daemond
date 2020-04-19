@@ -131,10 +131,11 @@ void loop(void) {
 	fd_set readfds;
 	FD_ZERO(&readfds);
 	for (Service *srv = services; srv; srv = srv->next) {
+		if (srv->killfd < 0) continue;
+		if (srv->killfd >= nfds) nfds = srv->killfd + 1;
 		FD_SET(srv->killfd, &readfds);
-		++nfds;
 	}
-	fflush(stdout);
+	fprintf(stderr, "nfds = %i\n", nfds);
 	nfds = pselect(nfds, &readfds, NULL, NULL,
 		timeout > 0 ? &(struct timespec){.tv_sec = timeout} : NULL,
 		&sync_sigmask
