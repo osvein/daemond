@@ -35,7 +35,7 @@ Service *service(const char *name) {
 		int flags = fcntl(self->killfd, F_GETFL);
 		if (flags < 0 ||
 			fcntl(self->killfd, F_SETFL, flags | O_NONBLOCK) < 0 ||
-			open(path, O_WRONLY | O_CLOEXEC) < 0
+			(self->killfdr = open(path, O_WRONLY | O_CLOEXEC)) < 0
 		) {
 			close(self->killfd);
 			self->killfd = -1;
@@ -59,7 +59,10 @@ void service_destroy(Service *self) {
 		unlink(path);
 		*base = '\0';
 		rmdir(path);
-		if (self->killfd >= 0) close(self->killfd);
+		if (self->killfd >= 0) {
+			close(self->killfd);
+			close(self->killfdr);
+		}
 		free(self);
 		self = next;
 	}

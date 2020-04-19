@@ -5,6 +5,7 @@ struct Service {
 	Service *next;
 	pid_t pid;
 	int killfd;
+	int killfdr;
 	char killbuf[SIGNAMELEN];
 	char name[];
 };
