@@ -31,10 +31,10 @@ static void usage(void) {
 
 static pid_t spawn(const char *name) {
 	char path[strlen(name) + max(lenof(execdir), lenof(substfile) + 1)];
-	sprintf(path, "%s/%s", name, substfile);
-	if (access(path, X_OK) < 0) {
-		sprintf(path, "%s%s", execdir, name);
-		if (access(path, X_OK) < 0) return 0;
+	sprintf(path, "../%s/%s", name, substfile);
+	if (access(path + 1, X_OK) < 0) {
+		sprintf(path, "../%s%s", execdir, name);
+		if (access(path + 1, X_OK) < 0) return 0;
 	}
 	pid_t pid = fork();
 	if (pid == 0) {
