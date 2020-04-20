@@ -81,14 +81,14 @@ void service_setpid(Service *self, pid_t pid) {
 }
 
 /* return >0 - valid signal
- * return =0 - no signal available
- * return <0 - invalid signal
+ * return =0 - invalid signal
+ * return <0 - no signal available
  */
 int service_readkill(Service *self) {
-	char *sep, *pos = self->killbuf;
+	char *delim, *pos = self->killbuf;
 	ssize_t n = strnlen(pos, lenof(self->killbuf));
-	bool overflow = n >= lenof(self->killbuf);
-	while (!(sep = memchr(pos, '\n', n))) {
+	bool overflow = false;
+	while (!(delim = memchr(pos, '\n', n))) {
 		pos += n;
 		if (pos >= endof(self->killbuf)) {
 			pos = self->killbuf;
@@ -97,13 +97,15 @@ int service_readkill(Service *self) {
 			*pos = '\0';
 		}
 		n = read(self->killfd, pos, endof(self->killbuf) - pos);
-		if (n <= 0) return 0;
+		if (n <= 0) return -1;
 		char *c = pos + n;
 		while (c-- > pos) if (!*c) *c = '?'; // neutralize NUL chars
 	}
-	*sep = '\0';
-	int sig = overflow ? -1 : getsignal(self->killbuf);
-	memmove(self->killbuf, sep, n - (sep - self->killbuf));
+	*delim++ = '\0';
+	int sig = overflow ? 0 : getsignal(self->killbuf);
+	n += pos - delim;
+	memmove(self->killbuf, delim, n);
+	self->killbuf[n] = '\0';
 	return sig;
 }
 

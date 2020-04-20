@@ -113,14 +113,14 @@ static void reap(void) {
 
 static void readkill(Service *srv) {
 	int sig;
-	while ((sig = service_readkill(srv))) {
+	while ((sig = service_readkill(srv)) >= 0) {
 		if (sig > 0) {
 			kill(srv->pid, sig);
-			dprintf(1, "sent signal to %s[%li] as requested on fifo: %s[%i]\n",
+			dprintf(1, "sent signal to %s[%li]: %s[%i]\n",
 				srv->name, (long)srv->pid, strsignal(sig), sig
 			);
 		} else {
-			dprintf(2, "invalid signal requested for %s[%li] on fifo\n",
+			dprintf(2, "invalid signal requested for %s[%li]\n",
 				srv->name, (long)srv->pid
 			);
 		}
