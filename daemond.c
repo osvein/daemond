@@ -51,7 +51,7 @@ static pid_t spawn(const char *name) {
 		execv(path, (char *const []){(char *)name, NULL});
 		exit(127);
 	}
-	dprintf(1, "spawned %s[%li]\n", name, (long)pid);
+	dprintf(1, "%s[%li] spawned\n", name, (long)pid);
 	return pid;
 }
 
@@ -79,9 +79,12 @@ static void scan(void) {
 		pid_t pid = spawn(srvfile->d_name);
 		if (!pid) continue;
 		Service *srv = service(srvfile->d_name);
+		if (srv->killfd < 0) {
+			dprintf(2, "%s failed to open killpipe", srv->name);
+		}
 		service_setpid(srv, pid);
 		service_insert(pos, srv);
-		if (*pos) dprintf(1, "added service %s\n", srv->name);
+		if (*pos) dprintf(1, "%s service added\n", srv->name);
 	}
 	closedir(dir);
 }
@@ -97,7 +100,7 @@ static void reap(void) {
 			dprintf(1, "exited with code %i\n", (int)WEXITSTATUS(status));
 		} else {
 			int sig = WTERMSIG(status);
-			dprintf(1, "was terminated by signal %s[%i]\n", strsignal(sig), sig);
+			dprintf(1, "terminated by signal %s[%i]\n", strsignal(sig), sig);
 		}
 		if (*srv) {
 			pid = spawn(name);
@@ -105,7 +108,7 @@ static void reap(void) {
 				service_setpid(*srv, pid);
 			} else {
 				service_destroy(service_delete(srv));
-				dprintf(1, "removed service %s\n", name);
+				dprintf(1, "%s service removed\n", name);
 			}
 		}
 	}

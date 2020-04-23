@@ -41,7 +41,6 @@ Service *service(const char *name) {
 			self->killfd = -1;
 		}
 	}
-	if (self->killfd < 0) dprintf(2, "failed to open %s\n", path);
 	return self;
 }
 
