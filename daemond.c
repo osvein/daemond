@@ -1,4 +1,5 @@
 #include <dirent.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
@@ -13,8 +14,14 @@
 #include "service.h"
 #include "util.h"
 
+#ifndef ismodified
+#define ismodified(newtime, prevtime) ( \
+	newtime.tv_sec != prevtime.tv_sec || newtime.tv_nsec != prevtime.tv_nsec \
+)
+#endif
+
 volatile sig_atomic_t termflag;
-sigset_t sync_sigmask;
+sigset_t sigmask_sync;
 const char *argv0;
 Service *services;
 time_t timeout;
@@ -25,21 +32,21 @@ static void usage(void) {
 }
 
 static void scan(void) {
-#if !SKIP_MTIME
 	{
 		static struct timespec scantime;
 		struct stat st;
-		stat(execdir, &st);
-		if (st.st_mtim.tv_sec == scantime.tv_sec &&
-			st.st_mtim.tv_nsec == scantime.tv_nsec
-		) return;
-		scantime = st.st_mtim;
+		if (stat(execdir, &st) < 0) {
+			dprintf(2, "failed to stat execdir: %s", strerror(errno));
+		} else if (ismodified(st.st_mtim, scantime)) {
+			scantime = st.st_mtim;
+		} else {
+			return;
+		}
 	}
-#endif
 
 	// i don't like dirent
 	DIR *dir = opendir(execdir);
-	if (!dir) return;
+	if (!dir) dprintf(2, "failed to open execdir: %s", strerror(errno));
 	struct dirent *srvfile;
 	while ((srvfile = readdir(dir))) {
 		if (*srvfile->d_name == '.') continue;
@@ -100,7 +107,7 @@ static void loop(void) {
 	}
 	nfds = pselect(nfds, &readfds, NULL, NULL,
 		timeout > 0 ? &(struct timespec){.tv_sec = timeout} : NULL,
-		&sync_sigmask
+		&sigmask_sync
 	);
 
 	for (Service *srv = services; srv && nfds > 0; srv = srv->next) {
@@ -115,7 +122,7 @@ static void terminate(int sig) {
 	termflag = 1;
 }
 
-static void signop(int sig) {}
+static void signop(int sig) {/* interrupts pselect */}
 
 int main(int argc, char **argv) {
 	argv0 = *argv;
@@ -136,23 +143,34 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	sigset_t sigmask;
-	sigemptyset(&sigmask);
-	sigaddset(&sigmask, SIGCHLD);
-	sigaddset(&sigmask, SIGINT);
-	sigaddset(&sigmask, SIGTERM);
-	sigprocmask(SIG_BLOCK, &sigmask, &sync_sigmask);
-
-	struct sigaction act = {.sa_flags = 0};
-	sigemptyset(&act.sa_mask);
+	struct sigaction sa = {0};
+	errno = 0;
+	if (sigemptyset(&sa.sa_mask) < 0) {
+		dprintf(2, "failed to init signal mask: %s", strerror(errno));
+		exit(1);
+	}
+	sigaddset(&sa.sa_mask, SIGCHLD);
+	sigaddset(&sa.sa_mask, SIGINT);
+	sigaddset(&sa.sa_mask, SIGTERM);
+	if (errno || sigprocmask(SIG_BLOCK, &sa.sa_mask, &sigmask_sync) < 0) {
+		dprintf(2, "failed to set signal mask: %s", strerror(errno));
+		exit(1);
+	}
 	act.sa_handler = terminate;
 	sigaction(SIGINT, &act, NULL);
 	sigaction(SIGTERM, &act, NULL);
 	act.sa_handler = signop;
 	act.sa_flags = SA_NOCLDSTOP;
 	sigaction(SIGCHLD, &act, NULL);
+	if (errno) {
+		dprintf(2, "failed to set signal handlers: %s", strerror(errrno));
+		exit(1);
+	}
 
 	while (!termflag) loop();
-	if (optind < argc) execvp(argv[optind], argv + optind);
-	return 0;
+	if (optind < argc) {
+		execvp(argv[optind], argv + optind)
+		dprintf(2, "failed to exec next_program: %s", strerror(errno));
+		exit(127);
+	}
 }

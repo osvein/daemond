@@ -50,6 +50,10 @@ Service *service(const char *name) {
 void service_destroy(Service *self) {
 	while (self) {
 		Service *next = self->next;
+		if (self->killfd >= 0) {
+			close(self->killfd);
+			close(self->killfdr);
+		}
 		char path[strlen(self->name) + 1
 			+ max(sizeof(pidfile), sizeof(killpipe))
 		];
@@ -61,10 +65,6 @@ void service_destroy(Service *self) {
 		unlink(path);
 		*base = '\0';
 		rmdir(path);
-		if (self->killfd >= 0) {
-			close(self->killfd);
-			close(self->killfdr);
-		}
 		free(self);
 		self = next;
 	}
@@ -151,12 +151,18 @@ void service_handlekill(Service *self) {
 	int sig;
 	while ((sig = service_readkill(self)) >= 0) {
 		if (sig > 0) {
-			kill(self->pid, sig);
-			dprintf(1, "%s[%li]: sent signal %s[%i] from killpipe\n",
-				self->name, (long)self->pid, strsignal(sig), sig
-			);
+			if (kill(self->pid, sig) >= 0) {
+				dprintf(1, "%s[%li]: sent signal %s[%i]\n",
+					self->name, (long)self->pid, strsignal(sig), sig
+				);
+			} else {
+				dprintf(2, "%s[%li]: failed to send signal %s[%li]: %s\n",
+					self->name, (long)self->pid, strsignal(sig), sig,
+					strerror(errno)
+				);
+			}
 		} else {
-			dprintf(2, "%s[%li]: invalid signal from killpipe\n",
+			dprintf(2, "%s[%li]: invalid signal\n",
 				self->name, (long)self->pid
 			);
 		}
