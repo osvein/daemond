@@ -46,10 +46,7 @@ static void scan(void) {
 		Service **pos = service_from_name(&services, srvfile->d_name);
 		if (*pos) continue;
 		Service *srv = service(srvfile->d_name);
-		if (!srv) {
-			dprintf(2, "%s service failed to allocate\n", srvfile->d_name);
-			continue;
-		}
+		if (!srv) continue;
 		service_spawn(srv);
 		if (srv->pid < 0) {
 			service_destroy(srv);
