@@ -13,10 +13,6 @@
 #include "service.h"
 #include "util.h"
 
-#if USE_VFORK
-#define fork vfork
-#endif
-
 const char execdir[] = "exec/";
 const char killpipe[] = "kill";
 const char pidfile[] = "pid";
@@ -25,7 +21,7 @@ const char substfile[] = "subst";
 Service *service(const char *name) {
 	Service *self = malloc(sizeof(*self) + strlen(name) + 1);
 	if (!self) {
-		dprintf(2, "%s failed to allocate: %s", name, strerror(errno));
+		dprintf(2, "%s: malloc failed: %s", name, strerror(errno));
 		return NULL;
 	}
 	self->next = NULL;
@@ -82,7 +78,7 @@ static void service_writepid(Service *self) {
 		fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 	}
 	if (fd < 0 || dprintf(fd, "%li\n", (long)self->pid) < 0) {
-		dprintf(2, "%s[%li] failed to write pidfile: %s",
+		dprintf(2, "%s[%li]: failed to write pidfile: %s",
 			self->name, (long)self->pid, strerror(errno)
 		);
 	}
@@ -115,10 +111,10 @@ void service_spawn(Service *self) {
 		execv(path, (char *const []){(char *)self->name, NULL});
 		exit(127);
 	} else if (self->pid > 0) {
-		dprintf(1, "%s[%li] spawned\n", self->name, (long)self->pid);
+		dprintf(1, "%s[%li]: forked\n", self->name, (long)self->pid);
 		service_writepid(self);
 	} else {
-		dprintf(2, "%s failed to spawn: %s", self->name, strerror(errno));
+		dprintf(2, "%s: fork failed: %s", self->name, strerror(errno));
 	}
 }
 
@@ -156,11 +152,11 @@ void service_handlekill(Service *self) {
 	while ((sig = service_readkill(self)) >= 0) {
 		if (sig > 0) {
 			kill(self->pid, sig);
-			dprintf(1, "%s[%li] sent signal %s[%i]\n",
+			dprintf(1, "%s[%li]: sent signal %s[%i] from killpipe\n",
 				self->name, (long)self->pid, strsignal(sig), sig
 			);
 		} else {
-			dprintf(2, "%s[%li] invalid signal\n",
+			dprintf(2, "%s[%li]: invalid signal from killpipe\n",
 				self->name, (long)self->pid
 			);
 		}

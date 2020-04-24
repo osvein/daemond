@@ -46,14 +46,16 @@ static void scan(void) {
 		Service **pos = service_from_name(&services, srvfile->d_name);
 		if (*pos) continue;
 		Service *srv = service(srvfile->d_name);
-		if (!srv) continue;
-		service_spawn(srv);
-		if (srv->pid < 0) {
+		if (srv) {
+			service_spawn(srv);
+			if (srv->pid > 0) {
+				service_insert(pos, srv);
+				dprintf(1, "%s service added\n", srv->name);
+				continue;
+			}
 			service_destroy(srv);
-			continue;
 		}
-		service_insert(pos, srv);
-		if (*pos) dprintf(1, "%s service added\n", srv->name);
+		dprintf(2, "%s service was not added\n", srvfile->d_name);
 	}
 	closedir(dir);
 }
