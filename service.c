@@ -1,4 +1,6 @@
+#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,20 +17,22 @@
 #define fork vfork
 #endif
 
-const char pidfile[] = "pid";
+const char execdir[] = "exec/";
 const char killpipe[] = "kill";
+const char pidfile[] = "pid";
+const char substfile[] = "subst";
 
 Service *service(const char *name) {
-	size_t namelen = strlen(name);
-	Service *self = malloc(sizeof(*self) + namelen + 1);
+	Service *self = malloc(sizeof(*self) + strlen(name) + 1);
+	if (!self) return NULL;
 	self->next = NULL;
 	self->pid = 0;
 	self->killbuf[0] = '\0';
 	stpcpy(self->name, name);
 	mkdir(name, 0777);
 
-	char path[namelen + 1 + lenof(killpipe)];
-	sprintf(path, "%s/%s", name, killpipe);
+	char path[snprintf(NULL, 0, "%s/%s", name, killpipe) + 1];
+	snprintf(path, sizeof(path), "%s/%s", name, killpipe);
 	mkfifo(path, 0777);
 	self->killfd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
 	if (self->killfd >= 0) {
@@ -67,23 +71,59 @@ void service_destroy(Service *self) {
 	}
 }
 
-void service_setpid(Service *self, pid_t pid) {
+static void service_writepid(Service *self) {
 	int fd;
 	{
-		char path[strlen(self->name) + 1 + lenof(pidfile)];
-		sprintf(path, "%s/%s", self->name, pidfile);
+		char path[snprintf(NULL, 0, "%s/%s", self->name, pidfile) + 1];
+		snprintf(path, sizeof(path), "%s/%s", self->name, pidfile);
 		fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 	}
-	dprintf(fd, "%li\n", (long)pid);
+	if (fd < 0 || dprintf(fd, "%li\n", (long)self->pid) < 0) {
+		dprintf(2, "%s[%li] failed to write pidfile",
+			self->name, (long)self->pid
+		);
+	}
 	close(fd);
-	self->pid = pid;
+}
+
+void service_spawn(Service *self) {
+	self->pid = -1;
+	char path[max(
+		snprintf(NULL, 0, "../%s/%s", self->name, substfile),
+		snprintf(NULL, 0, "../%s%s", execdir, self->name)
+	)];
+	snprintf(path, sizeof(path), "../%s/%s", self->name, substfile);
+	if (access(path + 1, X_OK) < 0) {
+		snprintf(path, sizeof(path), "../%s%s", execdir, self->name);
+		if (access(path + 1, X_OK) < 0) return;
+	}
+	self->pid = fork();
+	if (self->pid == 0) {
+		sigset_t sigmask;
+		errno = 0;
+		sigemptyset(&sigmask);
+		sigprocmask(SIG_SETMASK, &sigmask, NULL);
+		chdir(self->name);
+		setsid();
+		close(0);
+		close(1);
+		close(2);
+		if (errno) exit(125);
+		execv(path, (char *const []){(char *)self->name, NULL});
+		exit(127);
+	} else if (self->pid > 0) {
+		dprintf(1, "%s[%li] spawned\n", self->name, (long)self->pid);
+		service_writepid(self);
+	} else {
+		dprintf(2, "%s failed to spawn", self->name);
+	}
 }
 
 /* return >0 - valid signal
  * return =0 - invalid signal
  * return <0 - no signal available
  */
-int service_readkill(Service *self) {
+static int service_readkill(Service *self) {
 	char *delim, *pos = self->killbuf;
 	ssize_t n = strnlen(pos, lenof(self->killbuf));
 	bool overflow = false;
@@ -106,6 +146,22 @@ int service_readkill(Service *self) {
 	memmove(self->killbuf, delim, n);
 	self->killbuf[n] = '\0';
 	return sig;
+}
+
+void service_handlekill(Service *self) {
+	int sig;
+	while ((sig = service_readkill(self)) >= 0) {
+		if (sig > 0) {
+			kill(self->pid, sig);
+			dprintf(1, "%s[%li] sent signal %s[%i]\n",
+				self->name, (long)self->pid, strsignal(sig), sig
+			);
+		} else {
+			dprintf(2, "%s[%li] invalid signal\n",
+				self->name, (long)self->pid
+			);
+		}
+	}
 }
 
 Service **service_from_name(Service **list, const char *name) {

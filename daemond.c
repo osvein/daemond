@@ -1,6 +1,4 @@
 #include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
@@ -15,9 +13,6 @@
 #include "service.h"
 #include "util.h"
 
-const char execdir[] = "exec/";
-const char substfile[] = "subst";
-
 volatile sig_atomic_t termflag;
 sigset_t sync_sigmask;
 const char *argv0;
@@ -27,32 +22,6 @@ time_t timeout;
 static void usage(void) {
 	dprintf(2, "usage: %s [-t timeout] [next_program [arg...]]\n", argv0);
 	exit(1);
-}
-
-static pid_t spawn(const char *name) {
-	char path[strlen(name) + max(lenof(execdir), lenof(substfile) + 1)];
-	sprintf(path, "../%s/%s", name, substfile);
-	if (access(path + 1, X_OK) < 0) {
-		sprintf(path, "../%s%s", execdir, name);
-		if (access(path + 1, X_OK) < 0) return 0;
-	}
-	pid_t pid = fork();
-	if (pid == 0) {
-		sigset_t sigmask;
-		errno = 0;
-		sigemptyset(&sigmask);
-		sigprocmask(SIG_SETMASK, &sigmask, NULL);
-		chdir(name);
-		setsid();
-		close(0);
-		close(1);
-		close(2);
-		if (errno) exit(125);
-		execv(path, (char *const []){(char *)name, NULL});
-		exit(127);
-	}
-	dprintf(1, "%s[%li] spawned\n", name, (long)pid);
-	return pid;
 }
 
 static void scan(void) {
@@ -76,13 +45,16 @@ static void scan(void) {
 		if (*srvfile->d_name == '.') continue;
 		Service **pos = service_from_name(&services, srvfile->d_name);
 		if (*pos) continue;
-		pid_t pid = spawn(srvfile->d_name);
-		if (!pid) continue;
 		Service *srv = service(srvfile->d_name);
-		if (srv->killfd < 0) {
-			dprintf(2, "%s failed to open killpipe", srv->name);
+		if (!srv) {
+			dprintf(2, "%s service failed to allocate\n", srvfile->d_name);
+			continue;
 		}
-		service_setpid(srv, pid);
+		service_spawn(srv);
+		if (srv->pid < 0) {
+			service_destroy(srv);
+			continue;
+		}
 		service_insert(pos, srv);
 		if (*pos) dprintf(1, "%s service added\n", srv->name);
 	}
@@ -95,37 +67,22 @@ static void reap(void) {
 	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
 		Service **srv = service_from_pid(&services, pid);
 		const char *name = *srv ? (*srv)->name : "";
-		dprintf(1, "%s[%li] ", name, (long)pid);
 		if (WIFEXITED(status)) {
-			dprintf(1, "exited with code %i\n", (int)WEXITSTATUS(status));
+			dprintf(1, "%s[%li] exited with code %i\n",
+				name, (long)pid, (int)WEXITSTATUS(status)
+			);
 		} else {
 			int sig = WTERMSIG(status);
-			dprintf(1, "terminated by signal %s[%i]\n", strsignal(sig), sig);
+			dprintf(1, "%s[%li] terminated by signal %s[%i]\n",
+				name, (long)pid, strsignal(sig), sig
+			);
 		}
 		if (*srv) {
-			pid = spawn(name);
-			if (pid) {
-				service_setpid(*srv, pid);
-			} else {
+			service_spawn(*srv);
+			if ((*srv)->pid < 0) {
 				service_destroy(service_delete(srv));
 				dprintf(1, "%s service removed\n", name);
 			}
-		}
-	}
-}
-
-static void readkill(Service *srv) {
-	int sig;
-	while ((sig = service_readkill(srv)) >= 0) {
-		if (sig > 0) {
-			kill(srv->pid, sig);
-			dprintf(1, "sent signal to %s[%li]: %s[%i]\n",
-				srv->name, (long)srv->pid, strsignal(sig), sig
-			);
-		} else {
-			dprintf(2, "invalid signal requested for %s[%li]\n",
-				srv->name, (long)srv->pid
-			);
 		}
 	}
 }
@@ -149,7 +106,7 @@ static void loop(void) {
 
 	for (Service *srv = services; srv && nfds > 0; srv = srv->next) {
 		if (FD_ISSET(srv->killfd, &readfds)) {
-			readkill(srv);
+			service_handlekill(srv);
 			--nfds;
 		}
 	}
