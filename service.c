@@ -156,7 +156,7 @@ void service_handlekill(Service *self) {
 					self->name, (long)self->pid, strsignal(sig), sig
 				);
 			} else {
-				dprintf(2, "%s[%li]: failed to send signal %s[%li]: %s\n",
+				dprintf(2, "%s[%li]: failed to send signal %s[%i]: %s\n",
 					self->name, (long)self->pid, strsignal(sig), sig,
 					strerror(errno)
 				);

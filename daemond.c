@@ -156,20 +156,20 @@ int main(int argc, char **argv) {
 		dprintf(2, "failed to set signal mask: %s", strerror(errno));
 		exit(1);
 	}
-	act.sa_handler = terminate;
-	sigaction(SIGINT, &act, NULL);
-	sigaction(SIGTERM, &act, NULL);
-	act.sa_handler = signop;
-	act.sa_flags = SA_NOCLDSTOP;
-	sigaction(SIGCHLD, &act, NULL);
+	sa.sa_handler = terminate;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+	sa.sa_handler = signop;
+	sa.sa_flags = SA_NOCLDSTOP;
+	sigaction(SIGCHLD, &sa, NULL);
 	if (errno) {
-		dprintf(2, "failed to set signal handlers: %s", strerror(errrno));
+		dprintf(2, "failed to set signal handlers: %s", strerror(errno));
 		exit(1);
 	}
 
 	while (!termflag) loop();
 	if (optind < argc) {
-		execvp(argv[optind], argv + optind)
+		execvp(argv[optind], argv + optind);
 		dprintf(2, "failed to exec next_program: %s", strerror(errno));
 		exit(127);
 	}
