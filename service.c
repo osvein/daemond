@@ -1,3 +1,5 @@
+/* service - handles service resources and control interfaces */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>

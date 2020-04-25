@@ -1,3 +1,5 @@
+/* daemond - process supervisor that can run as PID 1 (init) */
+
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>

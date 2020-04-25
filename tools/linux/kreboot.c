@@ -1,3 +1,5 @@
+/* kreboot - request kernel shutdown directly */
+
 #include <stdio.h>
 #include <unistd.h>
 

@@ -1,3 +1,5 @@
+/* getsignal - associates signal names and signal numbers */
+
 #include <errno.h>
 #include <limits.h>
 #include <signal.h>
