@@ -2,13 +2,16 @@
 
 CFLAGS += -D _POSIX_C_SOURCE=200809L -D SIGNAMELEN=7
 
-ALL = daemond
-CLEAN = $(ALL)
-all : $(ALL)
-
 DAEMOND = daemond.o service.o getsignal.o
+CLEAN += daemond
 daemond : $(DAEMOND)
 	$(CC) $(LDFLAGS) -o $@ $(DAEMOND)
+
+TOOLS_LINUX = tools/linux/kreboot
+CLEAN += $(TOOLS_LINUX)
+.PHONY : tools/linux
+tools/linux : $(TOOLS_LINUX)
+tools/linux/kreboot : tools/linux/kreboot.c
 
 CLEAN += daemond.o getsignal.o service.o
 deamond.o : daemond.c service.h util.h
