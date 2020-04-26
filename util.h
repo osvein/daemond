@@ -1,6 +1,3 @@
-#include <stddef.h>
-#include <stdint.h>
-
 #define lenof(array) (sizeof(array) / sizeof(*array))
 #define endof(array) (array + lenof(array))
 #define member(type, name) ((type *)0)->name // can be passed to sizeof etc.
