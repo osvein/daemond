@@ -38,7 +38,7 @@ static void scan(void) {
 		static struct timespec scantime;
 		struct stat st;
 		if (stat(execdir, &st) < 0) {
-			dprintf(2, "failed to stat execdir: %s", strerror(errno));
+			LOG_ERRNO("failed to stat execdir");
 		} else if (ismodified(st.st_mtim, scantime)) {
 			scantime = st.st_mtim;
 		} else {
@@ -48,23 +48,21 @@ static void scan(void) {
 
 	// i don't like dirent
 	DIR *dir = opendir(execdir);
-	if (!dir) dprintf(2, "failed to open execdir: %s", strerror(errno));
+	if (!dir) LOG_ERRNO("failed to open execdir");
 	struct dirent *srvfile;
 	while ((srvfile = readdir(dir))) {
 		if (*srvfile->d_name == '.') continue;
 		Service **pos = service_from_name(&services, srvfile->d_name);
 		if (*pos) continue;
 		Service *srv = service(srvfile->d_name);
-		if (srv) {
-			service_spawn(srv);
-			if (srv->pid > 0) {
-				service_insert(pos, srv);
-				dprintf(1, "%s service added\n", srv->name);
-				continue;
-			}
-			service_destroy(srv);
+		if (!srv) continue;
+		service_spawn(srv);
+		if (srv->pid > 0) {
+			service_insert(pos, srv);
+			LOG("%s service added", srv->name);	service_destroy(srv);
+			continue;
 		}
-		dprintf(2, "%s service was not added\n", srvfile->d_name);
+		service_destroy(srv);
 	}
 	closedir(dir);
 }
@@ -76,12 +74,12 @@ static void reap(void) {
 		Service **srv = service_from_pid(&services, pid);
 		const char *name = *srv ? (*srv)->name : "";
 		if (WIFEXITED(status)) {
-			dprintf(1, "%s[%li] exited with code %i\n",
+			LOG("%s[%li] exited with code %i",
 				name, (long)pid, (int)WEXITSTATUS(status)
 			);
 		} else {
 			int sig = WTERMSIG(status);
-			dprintf(1, "%s[%li] terminated by signal %s[%i]\n",
+			LOG("%s[%li] terminated by signal %s[%i]",
 				name, (long)pid, strsignal(sig), sig
 			);
 		}
@@ -89,7 +87,7 @@ static void reap(void) {
 			service_spawn(*srv);
 			if ((*srv)->pid < 0) {
 				service_destroy(service_delete(srv));
-				dprintf(1, "%s service removed\n", name);
+				LOG("%s service removed", name);
 			}
 		}
 	}
@@ -147,16 +145,12 @@ int main(int argc, char **argv) {
 
 	struct sigaction sa = {0};
 	errno = 0;
-	if (sigemptyset(&sa.sa_mask) < 0) {
-		dprintf(2, "failed to init signal mask: %s", strerror(errno));
-		exit(1);
-	}
+	if (sigemptyset(&sa.sa_mask) < 0) DIE_ERRNO("failed to init signal mask");
 	sigaddset(&sa.sa_mask, SIGCHLD);
 	sigaddset(&sa.sa_mask, SIGINT);
 	sigaddset(&sa.sa_mask, SIGTERM);
 	if (errno || sigprocmask(SIG_BLOCK, &sa.sa_mask, &sigmask_sync) < 0) {
-		dprintf(2, "failed to set signal mask: %s", strerror(errno));
-		exit(1);
+		DIE_ERRNO("failed to set signal mask");
 	}
 	sa.sa_handler = terminate;
 	sigaction(SIGINT, &sa, NULL);
@@ -164,15 +158,12 @@ int main(int argc, char **argv) {
 	sa.sa_handler = signop;
 	sa.sa_flags = SA_NOCLDSTOP;
 	sigaction(SIGCHLD, &sa, NULL);
-	if (errno) {
-		dprintf(2, "failed to set signal handlers: %s", strerror(errno));
-		exit(1);
-	}
+	if (errno) DIE_ERRNO("failed to set signal handlers");
 
 	while (!termflag) loop();
 	if (optind < argc) {
 		execvp(argv[optind], argv + optind);
-		dprintf(2, "failed to exec next_program: %s", strerror(errno));
+		LOG_ERRNO("failed to exec next_program");
 		exit(127);
 	}
 }
