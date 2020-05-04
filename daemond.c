@@ -22,11 +22,13 @@
 )
 #endif
 
-volatile sig_atomic_t termflag;
-sigset_t sigmask_sync;
 const char *argv0;
-Service *services;
+char **next_program;
 time_t timeout;
+sigset_t sigmask_sync;
+
+volatile sig_atomic_t termflag;
+Service *services;
 
 static void usage(void) {
 	dprintf(2, "usage: %s [-t timeout] [next_program [arg...]]\n", argv0);
@@ -124,10 +126,15 @@ static void terminate(int sig) {
 
 static void signop(int sig) {/* interrupts pselect */}
 
-int main(int argc, char **argv) {
-	argv0 = *argv;
+static void exec_next(void) {
+	execvp(*next_program, next_program);
+	LOG_ERRNO("failed to exec next_program");
+}
 
+int main(int argc, char **argv) {
 	int c;
+
+	argv0 = *argv;
 	while ((c = getopt(argc, argv, "t:")) >= 0) {
 		switch (c) {
 		case 't':
@@ -142,6 +149,8 @@ int main(int argc, char **argv) {
 			usage();
 		}
 	}
+	next_program = argv + optind;
+	if (*next_program) atexit(exec_next);
 
 	struct sigaction sa = {0};
 	errno = 0;
@@ -161,9 +170,4 @@ int main(int argc, char **argv) {
 	if (errno) DIE_ERRNO("failed to set signal handlers");
 
 	while (!termflag) loop();
-	if (optind < argc) {
-		execvp(argv[optind], argv + optind);
-		LOG_ERRNO("failed to exec next_program");
-		exit(127);
-	}
 }
