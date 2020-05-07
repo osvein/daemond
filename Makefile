@@ -7,6 +7,12 @@ CLEAN += daemond
 daemond : $(DAEMOND)
 	$(CC) $(LDFLAGS) -o $@ $(DAEMOND)
 
+TOOLS = tools/waitsocket
+CLEAN += $(TOOLS)
+.PHONY : tools
+tools : $(TOOLS)
+tools/waitsocket : tools/waitsocket.c util.h
+
 TOOLS_LINUX = tools/linux/kreboot tools/linux/linkd
 CLEAN += $(TOOLS_LINUX)
 .PHONY : tools/linux
