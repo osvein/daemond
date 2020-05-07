@@ -1,3 +1,7 @@
+#include <errno.h>
+#include <locale.h>
+#include <string.h>
+
 #define lenof(array) (sizeof(array) / sizeof(*array))
 #define endof(array) (array + lenof(array))
 #define member(type, name) ((type *)0)->name // can be passed to sizeof etc.
@@ -20,7 +24,7 @@
  *   e.g. errno for strerror like LOG_ERRNO does
  */
 #define LOG(...) LOG_INTERNAL_(__VA_ARGS__, 0)
-#define LOG_ERRNO(...) LOG_ERRNO_INTERNAL_(__VA_ARGS__, strerror(errno), errno)
+#define LOG_ERRNO(...) LOG_ERRNO_INTERNAL_(__VA_ARGS__, err(), errno)
 #define DIE(...) (LOG(__VA_ARGS__), exit(1))
 #define DIE_ERRNO(...) (LOG_ERRNO(__VA_ARGS__), exit(1))
 
@@ -29,3 +33,10 @@
 #define LOG_ERRNO_INTERNAL_(f, ...) LOG_INTERNAL_(f ": %s[%i]!", __VA_ARGS__)
 
 extern const char *argv0;
+
+/* thread-safe strerror(errno) */
+static inline const char *err(void) {
+	locale_t l = newlocale(LC_ALL_MASK, "", 0);
+	if (!l) return "locale error";
+	return strerror_l(errno, l);
+}
