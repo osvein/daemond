@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
 				char *endptr;
 				unsigned long l = strtoul(optarg, &endptr, 10);
 				if (!*optarg || *optarg == '-' || *endptr) usage();
-				delay = min(l, UINT_MAX);
+				delay = MIN(l, UINT_MAX);
 			}
 			break;
 		case 'i':

@@ -71,7 +71,7 @@ void service_destroy(Service *self) {
 			close(self->killfdr);
 		}
 		char path[strlen(self->name) + 1
-			+ max(sizeof(pidfile), sizeof(killpipe))
+			+ MAX(sizeof(pidfile), sizeof(killpipe))
 		];
 		char *base = stpcpy(path, self->name);
 		*base++ = '/';
@@ -101,7 +101,7 @@ static void service_writepid(Service *self) {
 
 void service_spawn(Service *self) {
 	self->pid = -1;
-	char path[max(
+	char path[MAX(
 		snprintf(NULL, 0, "../%s/%s", self->name, substfile),
 		snprintf(NULL, 0, "../%s%s", execdir, self->name)
 	)];

@@ -2,8 +2,9 @@
 #define endof(array) (array + lenof(array))
 #define member(type, name) ((type *)0)->name // can be passed to sizeof etc.
 
-#define min(a, b) (a < b ? a : b)
-#define max(a, b) (a > b ? a : b)
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define CAP(i, min, max) MIN(MAX(i, min), max)
 
 /* LOGGING HELPERS
  * argv0 must be defined, preferably set to argv[0] in main
