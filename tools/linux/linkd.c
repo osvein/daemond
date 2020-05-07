@@ -39,13 +39,13 @@ static void loop(void) {
 		pid_t pid = fork();
 		if (pid == 0) {
 			execvp(*command, command);
-			LOG_ERRNO("failed to exec command");
+			LOG("failed to exec command: %s", err());
 			exit(127);
 		} else if (pid < 0) {
-			DIE_ERRNO("fork failed");
+			DIE("fork failed: %s", err());
 		}
 		delaystate = 0;
-		if (waitpid(pid, &status, 0) < 0) DIE_ERRNO("wait failed");
+		if (waitpid(pid, &status, 0) < 0) DIE("wait failed: %s", err());
 		if (!ignore_exit && WIFEXITED(status) && WEXITSTATUS(status)) exit(0);
 	} else if (delaystate == 0) {
 		delaystate = 1;
@@ -58,7 +58,7 @@ static void loop(void) {
 		if (s == 0) {
 			DIE("netlink closed unexpectedly!");
 		} else if (s < 0 && errno != EINTR && errno != ENOBUFS) {
-			DIE_ERRNO("failed to read netlink");
+			DIE("failed to read netlink: %s", err());
 		}
 	} while (!is_trigger_msg(&hdr));
 }
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
 
 	struct sigaction sa = {.sa_handler = handle_alarm};
 	if (sigemptyset(&sa.sa_mask) < 0 || sigaction(SIGALRM, &sa, NULL) < 0) {
-		DIE_ERRNO("failed to install signal handlers");
+		DIE("failed to install signal handlers: %s", err());
 	}
 
 	struct sockaddr_nl addr = {
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
 	};
 	nl = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_ROUTE);
 	if (nl < 0 || bind(nl, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		DIE_ERRNO("failed to open rtnetlink");
+		DIE("failed to open rtnetlink: %s", err());
 	}
 	while (1) loop();
 }

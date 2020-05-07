@@ -40,7 +40,7 @@ static void scan(void) {
 		static struct timespec scantime;
 		struct stat st;
 		if (stat(execdir, &st) < 0) {
-			LOG_ERRNO("failed to stat execdir");
+			LOG("failed to stat execdir: %s", err());
 		} else if (ismodified(st.st_mtim, scantime)) {
 			scantime = st.st_mtim;
 		} else {
@@ -50,7 +50,7 @@ static void scan(void) {
 
 	// i don't like dirent
 	DIR *dir = opendir(execdir);
-	if (!dir) LOG_ERRNO("failed to open execdir");
+	if (!dir) LOG("failed to open execdir: %s", err());
 	struct dirent *srvfile;
 	while ((srvfile = readdir(dir))) {
 		if (*srvfile->d_name == '.') continue;
@@ -128,7 +128,7 @@ static void signop(int sig) {/* interrupts pselect */}
 
 static void exec_next(void) {
 	execvp(*next_program, next_program);
-	LOG_ERRNO("failed to exec next_program");
+	LOG("failed to exec next_program: %s", err());
 }
 
 int main(int argc, char **argv) {
@@ -154,12 +154,14 @@ int main(int argc, char **argv) {
 
 	struct sigaction sa = {0};
 	errno = 0;
-	if (sigemptyset(&sa.sa_mask) < 0) DIE_ERRNO("failed to init signal mask");
+	if (sigemptyset(&sa.sa_mask) < 0) {
+		DIE("failed to init signal mask: %s", err());
+	}
 	sigaddset(&sa.sa_mask, SIGCHLD);
 	sigaddset(&sa.sa_mask, SIGINT);
 	sigaddset(&sa.sa_mask, SIGTERM);
 	if (errno || sigprocmask(SIG_BLOCK, &sa.sa_mask, &sigmask_sync) < 0) {
-		DIE_ERRNO("failed to set signal mask");
+		DIE("failed to set signal mask: %s", err());
 	}
 	sa.sa_handler = terminate;
 	sigaction(SIGINT, &sa, NULL);
@@ -167,7 +169,7 @@ int main(int argc, char **argv) {
 	sa.sa_handler = signop;
 	sa.sa_flags = SA_NOCLDSTOP;
 	sigaction(SIGCHLD, &sa, NULL);
-	if (errno) DIE_ERRNO("failed to set signal handlers");
+	if (errno) DIE("failed to set signal handlers: %s", err());
 
 	while (!termflag) loop();
 }

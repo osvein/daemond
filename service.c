@@ -15,17 +15,10 @@
 #include "service.h"
 #include "util.h"
 
-#define SERVICE_LOG(self, ...) SERVICE_LOG_INTERNAL_((self), __VA_ARGS__, 0)
-#define SERVICE_LOG_ERRNO(self, ...) ( \
-	SERVICE_LOG_ERRNO_INTERNAL_((self), __VA_ARGS__, strerror(errno), errno) \
-)
-#define SERVICE_LOG_INTERNAL_(s, f, ...) (s->pid > 0 ? \
-	LOG_INTERNAL_("%s[%li]: " f, s->name, (long)s->pid, __VA_ARGS__) : \
-	LOG_INTERNAL_("%s: " f, s->name, __VA_ARGS__) \
-)
-#define SERVICE_LOG_ERRNO_INTERNAL_(s, f, ...) (self->pid > 0 ? \
-	LOG_ERRNO_INTERNAL_("%s[%li]: " f, s->name, (long)s->pid, __VA_ARGS__) : \
-	LOG_ERRNO_INTERNAL_("%s: " f, s->name, __VA_ARGS__) \
+#define SERVICE_LOG(self, ...) SERVICE_LOG_INTERNAL_((self), __VA_ARGS__, "")
+#define SERVICE_LOG_INTERNAL_(self, f, ...) (self->pid > 0 ? \
+	LOG_INTERNAL_("%s[%li]: " f, self->name, (long)self->pid, __VA_ARGS__) : \
+	LOG_INTERNAL_("%s: " f, self->name, __VA_ARGS__) \
 )
 
 const char execdir[] = "exec/";
@@ -36,7 +29,7 @@ const char substfile[] = "subst";
 Service *service(const char *name) {
 	Service *self = malloc(sizeof(*self) + strlen(name) + 1);
 	if (!self) {
-		LOG_ERRNO("%s: malloc failed", name);
+		LOG("%s: malloc failed: %s", name, err());
 		return NULL;
 	}
 	self->next = NULL;
@@ -59,7 +52,9 @@ Service *service(const char *name) {
 			self->killfd = -1;
 		}
 	}
-	if (self->killfd < 0) SERVICE_LOG_ERRNO(self, "failed to open killpipe");
+	if (self->killfd < 0) {
+		SERVICE_LOG(self, "failed to open killpipe: %s", err());
+	}
 	return self;
 }
 
@@ -94,7 +89,7 @@ static void service_writepid(Service *self) {
 		fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 	}
 	if (fd < 0 || dprintf(fd, "%li\n", (long)self->pid) < 0) {
-		SERVICE_LOG_ERRNO(self, "failed to write pidfile");
+		SERVICE_LOG(self, "failed to write pidfile: %s", err());
 	}
 	close(fd);
 }
@@ -128,7 +123,7 @@ void service_spawn(Service *self) {
 		SERVICE_LOG(self, "forked");
 		service_writepid(self);
 	} else {
-		SERVICE_LOG_ERRNO(self, "fork failed");
+		SERVICE_LOG(self, "fork failed: %s", err());
 	}
 }
 
@@ -165,11 +160,13 @@ void service_handlekill(Service *self) {
 	int sig;
 	while ((sig = service_readkill(self)) >= 0) {
 		if (sig > 0) {
-			const char *s = strsignal(sig);
+			const char *str = strsignal(sig);
 			if (kill(self->pid, sig) >= 0) {
-				SERVICE_LOG(self, "sent signal %s[%i]", s, sig);
+				SERVICE_LOG(self, "sent signal %s[%i]", str, sig);
 			} else {
-				SERVICE_LOG_ERRNO(self, "failed to send signal %s[%i]", s, sig);
+				SERVICE_LOG(self, "failed to send signal %s[%i]: %s",
+					str, sig, err()
+				);
 			}
 		} else {
 			SERVICE_LOG(self, "invalid signal!");
