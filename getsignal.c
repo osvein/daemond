@@ -84,16 +84,13 @@ const Getsignal getsignals[] = {
 };
 
 int getsignal(const char *name) {
-	if (!*name) return 0;
-	errno = 0;
-	char *endptr;
-	long num = strtol(name, &endptr, 10);
-	if (!errno && !*endptr && num > 0 && num <= INT_MAX) {
+	char *p = (char *)name;
+	int num = parseuint(&p, INT_MAX, 10);
+	if (*p) {
 		return num;
-	} else if (endptr != name) {
+	} else if (p != name) {
 		return 0;
 	}
-
 	for (const Getsignal *s = getsignals; s->num; ++s) {
 		if (strncasecmp(s->name, name, SIGNAMELEN) == 0) return s->num;
 	}

@@ -71,11 +71,9 @@ static int parseaddr_inet(char *str, struct sockaddr *addr) {
 		}
 	}
 	if (sport) {
-		char *endptr;
-		unsigned long l;
-		l = strtoul(sport, &endptr, 10);
-		if (l > 0xFFFF || !*sport || *sport == '-' || *endptr) return -1;
-		*pport = l;
+		char *p = sport;
+		*pport = parseuint(&p, 0xFFFF, 10);
+		if (*p) return -1;
 	} else {
 		*pport = 0;
 	}
