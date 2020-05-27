@@ -7,10 +7,14 @@ CLEAN += daemond
 daemond : $(DAEMOND)
 	$(CC) $(LDFLAGS) -o $@ $(DAEMOND)
 
-TOOLS = tools/waitsocket
+TOOLS = tools/mklock tools/waitsocket
 CLEAN += $(TOOLS)
 .PHONY : tools
 tools : $(TOOLS)
+TOOLS_MKLOCK = tools/mklock.c parsechmod.o
+tools/mklock : $(TOOLS_MKLOCK) parsechmod.h util.h
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TOOLS_MKLOCK)
+
 tools/waitsocket : tools/waitsocket.c util.h
 
 TOOLS_LINUX = tools/linux/kreboot tools/linux/linkd
