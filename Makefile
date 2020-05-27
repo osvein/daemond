@@ -20,9 +20,10 @@ tools/linux : $(TOOLS_LINUX)
 tools/linux/kreboot : tools/linux/kreboot.c
 tools/linux/linkd : tools/linux/linkd.c util.h
 
-CLEAN += daemond.o getsignal.o service.o
+CLEAN += daemond.o getsignal.o parsechmod.o service.o
 deamond.o : daemond.c service.h util.h
 getsignal.o : getsignal.c getsignal.h util.h
+parsechmod.o : parsechmod.c parsechmod.h util.h
 service.o : service.c service.h getsignal.h util.h
 
 clean:
