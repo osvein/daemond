@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <locale.h>
+#include <stdint.h>
 #include <string.h>
 
 #define lenof(array) (sizeof(array) / sizeof(*array))
@@ -33,4 +34,24 @@ static inline const char *err(void) {
 	locale_t l = newlocale(LC_ALL_MASK, "", 0);
 	if (!l) return "locale error";
 	return strerror_l(errno, l);
+}
+
+/* locale independent. no sign character. 2 <= base <= 36
+ * stops at the first character that is not a digit for base, or is a digit that
+ * would cause the result to be larger than max. a pointer to that character is
+ * stored in *str
+ */
+static inline uintmax_t parseuint(char **str, uintmax_t max, int base) {
+	uintmax_t i = 0;
+	while (1) {
+		char c = **str;
+		if (c >= '0' && c <= '9') c -= '0';
+		else if (c >= 'a' && c <= 'z') c -= 'a' - 10;
+		else if (c >= 'A' && c <= 'Z') c -= 'A' - 10;
+		else break;
+		if (c >= base || (max - c) / base < i) break;
+		i = i * base + c;
+		++*str;
+	}
+	return i;
 }
